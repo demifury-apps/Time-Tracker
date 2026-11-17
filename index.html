@@ -93,7 +93,8 @@ details summary::-webkit-details-marker{display:none}
 details summary::after{content:"Edit";font-size:13px;color:var(--accent)}
 details[open] summary::after{content:"Close"}
 .cats{margin-top:12px;display:grid;gap:6px}
-.crow{display:grid;grid-template-columns:36px 1fr 32px 32px auto;gap:4px;align-items:center}
+.crow{display:grid;grid-template-columns:36px 1fr 32px 32px auto auto;gap:4px;align-items:center}
+.crow .hid{font-size:13px;white-space:nowrap;color:var(--muted, inherit)}
 .crow input{width:100%;min-width:0}
 .crow .sw{width:36px;height:36px;padding:0;display:grid;place-items:center}
 .crow .sw .dot{width:18px;height:18px}
@@ -271,6 +272,14 @@ function ingest(d) {
   for (const [k, id, h] of d.entries) (entries[k] = entries[k] || {})[id] = (entries[k][id] || 0) + h;
 }
 const catById = id => cats.find(c => c.id === id);
+/* categories hidden from the day form on this device (still in charts, hours kept on save) */
+let hiddenIds = [];
+try { hiddenIds = JSON.parse(localStorage.getItem('tt.hidden') || '[]'); } catch (e) {}
+const isHidden = id => hiddenIds.includes(id);
+function setHidden(id, on) {
+  hiddenIds = hiddenIds.filter(x => x !== id); if (on) hiddenIds.push(id);
+  try { localStorage.setItem('tt.hidden', JSON.stringify(hiddenIds)); } catch (e) {}
+}
 
 /* ---------- log a day ---------- */
 function renderLog() {
@@ -278,7 +287,7 @@ function renderLog() {
   const dirty = !!drafts[day];
   renderDayLabel();
   if (!cats.length) { $('#rows').innerHTML = '<div class="empty">No categories yet. Add some below.</div>'; }
-  else $('#rows').innerHTML = cats.map(c => {
+  else $('#rows').innerHTML = cats.filter(c => !isHidden(c.id)).map(c => {
     const saved = entries[day] && entries[day][c.id];
     const v = dirty && drafts[day][c.id] !== undefined ? drafts[day][c.id] : (saved ? fmtH(saved) : '');
     return `<div class="lrow" data-id="${esc(c.id)}">
@@ -327,6 +336,8 @@ $('#nextDay').onclick = () => goDay(addDays(day, 1));
 $('#todayBtn').onclick = () => goDay(todayKey());
 $('#save').onclick = async () => {
   const d = day, vals = {};
+  // the server replaces the whole day, so send hidden categories' saved hours back unchanged
+  cats.forEach(c => { if (isHidden(c.id) && entries[d] && entries[d][c.id] > 0) vals[c.id] = entries[d][c.id]; });
   document.querySelectorAll('#rows .lrow').forEach(r => {
     const v = parseH(r.querySelector('input').value); if (v > 0) vals[r.dataset.id] = Math.round(v * 100) / 100;
   });
@@ -449,6 +460,7 @@ function renderCats() {
       <input value="${esc(c.name)}" placeholder="Category name" maxlength="40" aria-label="Name">
       <button class="icon" data-a="up" aria-label="Move up"${i === 0 ? ' disabled' : ''}>↑</button>
       <button class="icon" data-a="down" aria-label="Move down"${i === catDraft.length - 1 ? ' disabled' : ''}>↓</button>
+      ${c.id ? `<button class="hid" data-a="hide" title="Hide or show this category in the day form (this device only)">${isHidden(c.id) ? 'Show' : 'Hide'}</button>` : '<span></span>'}
       <button class="del" data-a="del">${delArmed === i ? 'Delete ' + fmtH(h) + ' h?' : 'Delete'}</button>`;
     if (palOpen === i) row += '<div class="pal">' + [1, 2, 3, 4, 5, 6, 7, 8].map(sl =>
       `<button data-a="slot" data-s="${sl}" aria-pressed="${String(sl) === String(c.color)}" aria-label="Colour ${sl}"><span class="dot" style="background:var(--s${sl})"></span></button>`).join('') +
@@ -471,6 +483,7 @@ $('#cats').addEventListener('click', e => {
   const b = e.target.closest('button[data-a]'); if (!b) return;
   const i = +b.closest('.crow').dataset.i, a = b.dataset.a;
   if (a !== 'del') delArmed = -1;
+  if (a === 'hide') { setHidden(catDraft[i].id, !isHidden(catDraft[i].id)); renderLog(); }
   if (a === 'pal') palOpen = palOpen === i ? -1 : i;
   if (a === 'slot') { catDraft[i].color = b.dataset.s; palOpen = -1; }
   if (a === 'up' && i > 0) { [catDraft[i - 1], catDraft[i]] = [catDraft[i], catDraft[i - 1]]; palOpen = -1; }
