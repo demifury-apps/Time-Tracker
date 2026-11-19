@@ -368,16 +368,14 @@ function renderStats() {
     for (const id in entries[k]) { if (!catById(id)) continue; vals[i][id] = (vals[i][id] || 0) + entries[k][id]; tot[id] = (tot[id] || 0) + entries[k][id]; }
   }
   const total = Object.values(tot).reduce((a, b) => a + b, 0);
-  // averages count days from the period start, or from the first day ever logged if that's later
-  const first = Object.keys(entries).reduce((m, k) => k < m ? k : m, today);
-  const from = first > r.s ? first : r.s, to = today < r.e ? today : r.e;
-  const elapsed = to < from ? 0 : daysBetween(from, to) + 1;
-  const logged = Object.keys(entries).filter(k => k >= r.s && k <= r.e && k <= today).length;
+  // averages count only the days in this period that have hours logged
+  const logged = Object.keys(entries).filter(k => k >= r.s && k <= r.e && k <= today
+    && Object.keys(entries[k]).some(id => catById(id) && entries[k][id] > 0)).length;
   $('#pTitle').textContent = r.title;
   $('#heroV').textContent = fmtH(total);
-  $('#heroSub').textContent = elapsed
-    ? 'avg ' + fmtH(total / elapsed) + ' h/day over ' + elapsed + (elapsed === 1 ? ' day' : ' days') + ' · ' + logged + ' logged'
-    : (today < r.s ? 'This period hasn’t started yet' : 'Before your first logged day');
+  $('#heroSub').textContent = logged
+    ? 'avg ' + fmtH(total / logged) + ' h/day over ' + logged + (logged === 1 ? ' logged day' : ' logged days')
+    : (today < r.s ? 'This period hasn’t started yet' : 'No days logged in this period');
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-pressed', b.dataset.p === period));
   lastStats = { r, vals, today };
   drawChart();
